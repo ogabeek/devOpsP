@@ -1,0 +1,18 @@
+name: Hello workflow  # 👋 shows up in the Actions UI
+
+on: [push]            # 🔔 run every time you push (any branch)
+
+jobs:
+  hello:
+    runs-on: ubuntu-latest      # 🏃 GitHub-hosted Ubuntu VM
+    steps:
+      - name: Show runner info
+        run: |
+          echo "➡️  OS and kernel"
+          uname -a
+          echo
+          echo "➡️  Default Python"
+          python --version
+
+      - name: List workspace files
+        run: ls -la
