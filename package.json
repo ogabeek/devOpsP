@@ -16,8 +16,8 @@
     "url": "https://github.com/ogabeek/devOpsP/issues"
   },
   "homepage": "https://github.com/ogabeek/devOpsP#readme",
-  "description": "",
   "dependencies": {
     "express": "^5.1.0"
-  }
+  },
+  "description": ""
 }
