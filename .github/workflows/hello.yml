@@ -12,6 +12,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Install Node 22 and run unit tests
+      - name: Set up Node 22 and run tests
+        uses: actions/setup-node@v3
+        with:
+          node-version: "22.x"
+      - run: |
+          npm install
+          node --test
+
       - name: Copy index.js, package.json, and lock file to Target VM
         uses: appleboy/scp-action@v1
         with:
@@ -67,5 +76,3 @@ jobs:
             sudo systemctl daemon-reload
             sudo systemctl enable myapp.service
             sudo systemctl restart myapp.service
-
-            echo "😎"
