@@ -1,18 +1,47 @@
-name: Hello workflow  # 👋 shows up in the Actions UI
+name: CI ➜ Deploy on Self-Hosted Runner
 
-on: [push]            # 🔔 run every time you push (any branch)
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  hello:
-    runs-on: ubuntu-latest      # 🏃 GitHub-hosted Ubuntu VM
-    steps:
-      - name: Show runner info
-        run: |
-          echo "➡️  OS and kernel"
-          uname -a
-          echo
-          echo "➡️  Default Python"
-          python --version
+  test-and-run:
+    runs-on: [ self-hosted, linux, lightsail ]
 
-      - name: List workspace files
-        run: ls -la
+    steps:
+      # 1️⃣ Checkout YOUR repo onto the Lightsail machine
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      # 2️⃣ (Optional) If Python 3.12 isn’t already installed on Lightsail, you could install it here.
+      # But since it’s self-hosted, you can pre-install Python once and for all.
+      #
+      # If you DO need to install or switch Python, you can:
+      # - Use actions/setup-python (it works on self-hosted runners, too).
+      #
+      - name: Ensure Python 3.12 is available
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      # 3️⃣ Run your unit tests with pytest
+      - name: Run pytest
+        run: |
+          pip install pytest         # or install your requirements.txt
+          pytest
+
+      # 4️⃣ Install the 'emoji' library (and any other deps)
+      - name: Install extra dependencies
+        run: |
+          pip install emoji
+
+      # 5️⃣ Run the ASCII banner script
+      - name: Run ASCII printer
+        run: |
+          mkdir -p ~/ascii_demo
+          cd ~/ascii_demo
+          echo "This is a demo of ASCII art printing in Python!"
+          # Copy or symlink ascii_printer.py into this folder if you want.
+          # But since 'checkout' put the file at the repo root, you can just run it directly:
+          python3 ../ascii_printer.py
