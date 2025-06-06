@@ -12,33 +12,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Ensure Node 22 
-      - uses: actions/setup-node@v3
+      - name: Copy index.js to Target VM
+        uses: appleboy/scp-action@v1
         with:
-          node-version: "22.x"
-
-      # 3) Install dependencies & run unit tests
-      - run: |
-          npm install
-          node --test
-        working-directory: ${{ github.workspace }}
-
-      # 4) Package index.js + node_modules into a tarball
-      - run: |
-          tar czf myapp.tar.gz index.js node_modules/
-        working-directory: ${{ github.workspace }}
-
-      # 5) Copy the tarball to target:~/deploy/
-      - uses: appleboy/scp-action@v1
-        with:
-          host:     ${{ secrets.TARGET_HOST }}
-          username: ${{ secrets.TARGET_USER }}
-          key:      ${{ secrets.TARGET_SSH_KEY }}
+          host:     ${{ secrets.TARGET_HOST }}    # e.g. "target"
+          username: ${{ secrets.TARGET_USER }}    # e.g. "laborant"
+          key:      ${{ secrets.TARGET_SSH_KEY }}  # your Jenkins→Target private key
           port:     22
-          source:   "myapp.tar.gz"
+          source:   "index.js"
           target:   "~/deploy/"
 
-      # 6) SSH into target, unpack, move into /opt/myapp, restart systemd
+
+
+      # SSH into target, unpack, move into /opt/myapp, restart systemd
       - uses: appleboy/ssh-action@v1
         with:
           host:     ${{ secrets.TARGET_HOST }}
@@ -49,15 +35,17 @@ jobs:
             set -eux
             mkdir -p ~/deploy
             cd ~/deploy
-            tar xzf myapp.tar.gz
-            rm myapp.tar.gz
-
+            
+            #make a folder
             sudo mkdir -p /opt/myapp
             sudo rm -rf /opt/myapp/*
-            sudo mv ~/deploy/* /opt/myapp/
+            sudo mv index.js /opt/myapp/
             sudo chown -R ${{ secrets.TARGET_USER }}: /opt/myapp
+
+
             echo "😁"
 
+            # Create a systemd process
             sudo tee /etc/systemd/system/myapp.service << 'EOF'
             [Unit]
             Description=My Node22 App
@@ -75,6 +63,7 @@ jobs:
             WantedBy=multi-user.target
             EOF
 
+            #reload and keept it alive
             sudo systemctl daemon-reload
             sudo systemctl enable myapp.service
             sudo systemctl restart myapp.service
