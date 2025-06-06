@@ -1,0 +1,23 @@
+{
+  "name": "devopsp",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ogabeek/devOpsP.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ogabeek/devOpsP/issues"
+  },
+  "homepage": "https://github.com/ogabeek/devOpsP#readme",
+  "description": "",
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}
