@@ -1,23 +1,71 @@
-{
-  "name": "devopsp",
-  "version": "1.0.0",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/ogabeek/devOpsP.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/ogabeek/devOpsP/issues"
-  },
-  "homepage": "https://github.com/ogabeek/devOpsP#readme",
-  "dependencies": {
-    "express": "^5.1.0"
-  },
-  "description": ""
-}
+name: CI ➜ Deploy Node22 to Target
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: [ self-hosted, Linux, X64 ]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy index.js, package.json, and lock file to Target VM
+        uses: appleboy/scp-action@v1
+        with:
+          host:     ${{ secrets.TARGET_HOST }}    # e.g. "target"
+          username: ${{ secrets.TARGET_USER }}    # e.g. "laborant"
+          key:      ${{ secrets.TARGET_SSH_KEY }}  # your Jenkins→Target private key
+          port:     22
+          source:   "index.js,package.json,package-lock.json"
+          target:   "~/deploy/"
+
+
+
+      # SSH into target, install dependencies, move into /opt/myapp, restart systemd
+      - uses: appleboy/ssh-action@v1
+        with:
+          host:     ${{ secrets.TARGET_HOST }}
+          username: ${{ secrets.TARGET_USER }}
+          key:      ${{ secrets.TARGET_SSH_KEY }}
+          port:     22
+          script: |
+            set -eux
+            mkdir -p ~/deploy
+            cd ~/deploy
+            
+            # Install production-only dependencies on target
+            npm install --production
+
+            # make a folder
+            sudo mkdir -p /opt/myapp
+            sudo rm -rf /opt/myapp/*
+            sudo mv * /opt/myapp/
+            sudo chown -R ${{ secrets.TARGET_USER }}: /opt/myapp
+
+            echo "😁"
+
+            # Create a systemd process
+            sudo tee /etc/systemd/system/myapp.service << 'EOF'
+            [Unit]
+            Description=My Node22 App
+            After=network.target
+
+            [Service]
+            Type=simple
+            User=${{ secrets.TARGET_USER }}
+            WorkingDirectory=/opt/myapp
+            ExecStart=/usr/bin/node /opt/myapp/index.js
+            Restart=always
+            Environment=NODE_ENV=production
+
+            [Install]
+            WantedBy=multi-user.target
+            EOF
+
+            # reload and keep it alive
+            sudo systemctl daemon-reload
+            sudo systemctl enable myapp.service
+            sudo systemctl restart myapp.service
