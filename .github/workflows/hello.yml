@@ -22,6 +22,11 @@ jobs:
           source:   "index.js,package.json,package-lock.json,Dockerfile"
           target:   "~/deploy/"
 
+
+      - name: Run unit tests
+        run: |
+          npm test
+
       - name: SSH into target, build Docker image, and configure systemd
         uses: appleboy/ssh-action@v1
         with:
@@ -64,3 +69,6 @@ jobs:
             sudo systemctl enable myapp.service
             sudo systemctl restart myapp.service
             # echo "😎"
+
+
+            
