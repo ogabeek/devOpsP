@@ -1,4 +1,4 @@
-name: CI ➜ Deploy on Self-Hosted Runner
+name: CI ➜ Deploy Node22 to Target
 
 on:
   push:
@@ -6,42 +6,75 @@ on:
   workflow_dispatch:
 
 jobs:
-  test-and-run:
-    runs-on: [ self-hosted, linux, lightsail ]
+  build-and-deploy:
+    runs-on: [ self-hosted, Linux, X64 ]
 
     steps:
-      # 1️⃣ Checkout YOUR repo onto the Lightsail machine
-      - name: Check out code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # 2️⃣ (Optional) If Python 3.12 isn’t already installed on Lightsail, you could install it here.
-      # But since it’s self-hosted, you can pre-install Python once and for all.
-      #
-      # If you DO need to install or switch Python, you can:
-      # - Use actions/setup-python (it works on self-hosted runners, too).
-      #
-      - name: Ensure Python 3.12 is available
-        uses: actions/setup-python@v5
+      # Ensure Node 22 
+      - uses: actions/setup-node@v3
         with:
-          python-version: '3.12'
-      
-      # 3️⃣ Run your unit tests with pytest
-      - name: Run pytest
-        run: |
-          pip install pytest         # or install your requirements.txt
-          pytest
+          node-version: "22.x"
 
-      # 4️⃣ Install the 'emoji' library (and any other deps)
-      - name: Install extra dependencies
-        run: |
-          pip install emoji
+      # 3) Install dependencies & run unit tests
+      - run: |
+          npm install
+          node --test
+        working-directory: ${{ github.workspace }}
 
-      # 5️⃣ Run the ASCII banner script
-      - name: Run ASCII printer
-        run: |
-          mkdir -p ~/ascii_demo
-          cd ~/ascii_demo
-          echo "This is a demo of ASCII art printing in Python!"
-          # Copy or symlink ascii_printer.py into this folder if you want.
-          # But since 'checkout' put the file at the repo root, you can just run it directly:
-          python3 ../ascii_printer.py
+      # 4) Package index.js + node_modules into a tarball
+      - run: |
+          tar czf myapp.tar.gz index.js node_modules/
+        working-directory: ${{ github.workspace }}
+
+      # 5) Copy the tarball to target:~/deploy/
+      - uses: appleboy/scp-action@v1
+        with:
+          host:     ${{ secrets.TARGET_HOST }}
+          username: ${{ secrets.TARGET_USER }}
+          key:      ${{ secrets.TARGET_SSH_KEY }}
+          port:     22
+          source:   "myapp.tar.gz"
+          target:   "~/deploy/"
+
+      # 6) SSH into target, unpack, move into /opt/myapp, restart systemd
+      - uses: appleboy/ssh-action@v1
+        with:
+          host:     ${{ secrets.TARGET_HOST }}
+          username: ${{ secrets.TARGET_USER }}
+          key:      ${{ secrets.TARGET_SSH_KEY }}
+          port:     22
+          script: |
+            set -eux
+            mkdir -p ~/deploy
+            cd ~/deploy
+            tar xzf myapp.tar.gz
+            rm myapp.tar.gz
+
+            sudo mkdir -p /opt/myapp
+            sudo rm -rf /opt/myapp/*
+            sudo mv ~/deploy/* /opt/myapp/
+            sudo chown -R ${{ secrets.TARGET_USER }}: /opt/myapp
+            echo "😁"
+
+            sudo tee /etc/systemd/system/myapp.service << 'EOF'
+            [Unit]
+            Description=My Node22 App
+            After=network.target
+
+            [Service]
+            Type=simple
+            User=${{ secrets.TARGET_USER }}
+            WorkingDirectory=/opt/myapp
+            ExecStart=/usr/bin/node /opt/myapp/index.js
+            Restart=always
+            Environment=NODE_ENV=production
+
+            [Install]
+            WantedBy=multi-user.target
+            EOF
+
+            sudo systemctl daemon-reload
+            sudo systemctl enable myapp.service
+            sudo systemctl restart myapp.service
