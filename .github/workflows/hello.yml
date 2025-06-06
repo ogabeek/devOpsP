@@ -12,19 +12,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Copy index.js to Target VM
+      - name: Copy index.js, package.json, and lock file to Target VM
         uses: appleboy/scp-action@v1
         with:
           host:     ${{ secrets.TARGET_HOST }}    # e.g. "target"
           username: ${{ secrets.TARGET_USER }}    # e.g. "laborant"
           key:      ${{ secrets.TARGET_SSH_KEY }}  # your Jenkins→Target private key
           port:     22
-          source:   "index.js"
+          source:   "index.js,package.json,package-lock.json"
           target:   "~/deploy/"
 
-
-
-      # SSH into target, unpack, move into /opt/myapp, restart systemd
+      # SSH into target, install Express, unpack, move into /opt/myapp, restart systemd
       - uses: appleboy/ssh-action@v1
         with:
           host:     ${{ secrets.TARGET_HOST }}
@@ -36,12 +34,14 @@ jobs:
             mkdir -p ~/deploy
             cd ~/deploy
             
+            # Install Express (production-only) on target
+            npm install --production
+
             #make a folder
             sudo mkdir -p /opt/myapp
             sudo rm -rf /opt/myapp/*
-            sudo mv index.js /opt/myapp/
+            sudo mv * /opt/myapp/
             sudo chown -R ${{ secrets.TARGET_USER }}: /opt/myapp
-
 
             echo "😁"
 
@@ -63,7 +63,9 @@ jobs:
             WantedBy=multi-user.target
             EOF
 
-            #reload and keept it alive
+            #reload and keep it alive
             sudo systemctl daemon-reload
             sudo systemctl enable myapp.service
             sudo systemctl restart myapp.service
+
+            echo "😎"
