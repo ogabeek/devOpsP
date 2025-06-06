@@ -1,4 +1,4 @@
-name: CI ➜ Deploy Node22 to Target
+name: CI ➜ Deploy Node22 
 
 on:
   push:
@@ -10,22 +10,20 @@ jobs:
     runs-on: [ self-hosted, Linux, X64 ]
 
     steps:
-      - uses: actions/checkout@v4
+        uses: actions/checkout@v4
 
-      - name: Copy index.js, package.json, and lock file to Target VM
+      - name: Copy application files (including Dockerfile) to Target VM
         uses: appleboy/scp-action@v1
         with:
-          host:     ${{ secrets.TARGET_HOST }}    # e.g. "target"
-          username: ${{ secrets.TARGET_USER }}    # e.g. "laborant"
-          key:      ${{ secrets.TARGET_SSH_KEY }}  # your Jenkins→Target private key
+          host:     ${{ secrets.TARGET_HOST }}      # target
+          username: ${{ secrets.TARGET_USER }}      # laborant
+          key:      ${{ secrets.TARGET_SSH_KEY }}    # ssh
           port:     22
-          source:   "index.js,package.json,package-lock.json"
+          source:   "index.js,package.json,package-lock.json,Dockerfile"
           target:   "~/deploy/"
 
-
-
-      # SSH into target, install dependencies, move into /opt/myapp, restart systemd
-      - uses: appleboy/ssh-action@v1
+      - name: SSH into target, build Docker image, and configure systemd
+        uses: appleboy/ssh-action@v1
         with:
           host:     ${{ secrets.TARGET_HOST }}
           username: ${{ secrets.TARGET_USER }}
@@ -33,39 +31,36 @@ jobs:
           port:     22
           script: |
             set -eux
+
+            # Ensure deploy directory exists and switch to it
             mkdir -p ~/deploy
             cd ~/deploy
-            
-            # Install production-only dependencies on target
-            npm install --production
+            # echo "😁"
+            # Build the Docker ( server listens on port 4444)
+            docker build -t myapp:latest .
 
-            # make a folder
-            sudo mkdir -p /opt/myapp
-            sudo rm -rf /opt/myapp/*
-            sudo mv * /opt/myapp/
-            sudo chown -R ${{ secrets.TARGET_USER }}: /opt/myapp
-
-            echo "😁"
-
-            # Create a systemd process
+            # Create a systemd
             sudo tee /etc/systemd/system/myapp.service << 'EOF'
             [Unit]
-            Description=My Node22 App
-            After=network.target
+            Description=My Node22 App (Docker Container)
+            After=network.target docker.service
+            Requires=docker.service
 
             [Service]
-            Type=simple
-            User=${{ secrets.TARGET_USER }}
-            WorkingDirectory=/opt/myapp
-            ExecStart=/usr/bin/node /opt/myapp/index.js
             Restart=always
-            Environment=NODE_ENV=production
+            ExecStartPre=/usr/bin/docker rm -f myapp || true
+            ExecStart=/usr/bin/docker run \
+              --name myapp \
+              -p 4444:4444 \
+              myapp:latest
+            ExecStop=/usr/bin/docker stop myapp
 
             [Install]
             WantedBy=multi-user.target
             EOF
 
-            # reload and keep it alive
+            #  start the service
             sudo systemctl daemon-reload
             sudo systemctl enable myapp.service
             sudo systemctl restart myapp.service
+            # echo "😎"
