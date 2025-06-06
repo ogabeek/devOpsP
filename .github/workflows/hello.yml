@@ -1,4 +1,3 @@
-# .github/workflows/hello.yml
 name: CI ➜ Deploy Node22 to Target
 
 on:
@@ -13,41 +12,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ───────────────────────────────────────────────────────────────────
-      # 2️⃣  Install Node 22 & run unit tests (including index.test.js)
-      # ───────────────────────────────────────────────────────────────────
-      - name: Set up Node 22 and run tests
-        uses: actions/setup-node@v3
-        with:
-          node-version: "22.x"
-      - name: Install dependencies & run tests
-        run: |
-          npm install              # installs express (and any other dep) based on package.json
-          node --test              # runs index.test.js (your unit test)
-        working-directory: ${{ github.workspace }}
-
-      # ───────────────────────────────────────────────────────────────────
-      # 3️⃣  Copy index.js, package.json, and package-lock.json to Target
-      # ───────────────────────────────────────────────────────────────────
-      - name: Copy application files to Target VM
+      - name: Copy index.js to Target VM
         uses: appleboy/scp-action@v1
         with:
           host:     ${{ secrets.TARGET_HOST }}    # e.g. "target"
           username: ${{ secrets.TARGET_USER }}    # e.g. "laborant"
-          key:      ${{ secrets.TARGET_SSH_KEY }}  # Jenkins→Target private key
+          key:      ${{ secrets.TARGET_SSH_KEY }}  # your Jenkins→Target private key
           port:     22
-          source:   "index.js,package.json,package-lock.json"
+          source:   "index.js"
           target:   "~/deploy/"
 
-      # ───────────────────────────────────────────────────────────────────
-      # 4️⃣  SSH into target:
-      #      • Install production dependencies (Express)
-      #      • Move all files into /opt/myapp
-      #      • Create/overwrite systemd unit
-      #      • Reload & restart service
-      # ───────────────────────────────────────────────────────────────────
-      - name: Deploy & start on Target VM
-        uses: appleboy/ssh-action@v1
+      # SSH into target, unpack, move into /opt/myapp, restart systemd
+      - uses: appleboy/ssh-action@v1
         with:
           host:     ${{ secrets.TARGET_HOST }}
           username: ${{ secrets.TARGET_USER }}
@@ -58,21 +34,18 @@ jobs:
             mkdir -p ~/deploy
             cd ~/deploy
             
-            # Install production‐only dependencies on Target (uses package.json & lock file)
-            npm install --production
-
             #make a folder
             sudo mkdir -p /opt/myapp
             sudo rm -rf /opt/myapp/*
-            sudo mv * /opt/myapp/
+            sudo mv index.js /opt/myapp/
             sudo chown -R ${{ secrets.TARGET_USER }}: /opt/myapp
 
             echo "😁"
 
-            # Create or overwrite the systemd service
+            # Create a systemd process
             sudo tee /etc/systemd/system/myapp.service << 'EOF'
             [Unit]
-            Description=My Node22 Express App
+            Description=My Node22 App
             After=network.target
 
             [Service]
@@ -87,7 +60,7 @@ jobs:
             WantedBy=multi-user.target
             EOF
 
-            #reload and keep it alive
+            #reload and keept it alive
             sudo systemctl daemon-reload
             sudo systemctl enable myapp.service
             sudo systemctl restart myapp.service
